@@ -2,6 +2,10 @@ version: '3'
 services:
   one-api:
     image: justsong/one-api
+    #environment:
+      #REDIS_CONN_STRING=redis://default:redispw@localhost:49153
+      #SESSION_SECRET=random_string
+      #SQL_DSN=root:123456@tcp(localhost:3306)/one-api
     volumes:
       - ./data/one-api:/data
     ports:
