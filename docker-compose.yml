@@ -1,0 +1,9 @@
+version: '3'
+services:
+  one-api:
+    image: justsong/one-api
+    volumes:
+      - ./data/one-api:/data
+    ports:
+      - '3000:3000'
+    restart: always
