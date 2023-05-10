@@ -75,6 +75,30 @@ func GetToken(c *gin.Context) {
 	return
 }
 
+func GetTokenStatus(c *gin.Context) {
+	tokenId := c.GetInt("token_id")
+	userId := c.GetInt("id")
+	token, err := model.GetTokenByIds(tokenId, userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	expiredAt := token.ExpiredTime
+	if expiredAt == -1 {
+		expiredAt = 0
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"object":          "credit_summary",
+		"total_granted":   token.RemainQuota,
+		"total_used":      0, // not supported currently
+		"total_available": token.RemainQuota,
+		"expires_at":      expiredAt * 1000,
+	})
+}
+
 func AddToken(c *gin.Context) {
 	isAdmin := c.GetInt("role") >= common.RoleAdminUser
 	token := model.Token{}
@@ -102,8 +126,8 @@ func AddToken(c *gin.Context) {
 		ExpiredTime:  token.ExpiredTime,
 	}
 	if isAdmin {
-		cleanToken.RemainTimes = token.RemainTimes
-		cleanToken.UnlimitedTimes = token.UnlimitedTimes
+		cleanToken.RemainQuota = token.RemainQuota
+		cleanToken.UnlimitedQuota = token.UnlimitedQuota
 	} else {
 		userId := c.GetInt("id")
 		quota, err := model.GetUserQuota(userId)
@@ -115,7 +139,7 @@ func AddToken(c *gin.Context) {
 			return
 		}
 		if quota > 0 {
-			cleanToken.RemainTimes = quota
+			cleanToken.RemainQuota = quota
 		}
 	}
 	err = cleanToken.Insert()
@@ -128,7 +152,7 @@ func AddToken(c *gin.Context) {
 	}
 	if !isAdmin {
 		// update user quota
-		err = model.DecreaseUserQuota(c.GetInt("id"), cleanToken.RemainTimes)
+		err = model.DecreaseUserQuota(c.GetInt("id"), cleanToken.RemainQuota)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -184,7 +208,7 @@ func UpdateToken(c *gin.Context) {
 			})
 			return
 		}
-		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainTimes <= 0 && !cleanToken.UnlimitedTimes {
+		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "令牌可用次数已用尽，无法启用，请先修改令牌剩余次数，或者设置为无限次数",
@@ -199,8 +223,8 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.Name = token.Name
 		cleanToken.ExpiredTime = token.ExpiredTime
 		if isAdmin {
-			cleanToken.RemainTimes = token.RemainTimes
-			cleanToken.UnlimitedTimes = token.UnlimitedTimes
+			cleanToken.RemainQuota = token.RemainQuota
+			cleanToken.UnlimitedQuota = token.UnlimitedQuota
 		}
 	}
 	err = cleanToken.Update()

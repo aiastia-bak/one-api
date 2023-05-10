@@ -25,6 +25,9 @@ const SystemSetting = () => {
     TurnstileSecretKey: '',
     RegisterEnabled: '',
     QuotaForNewUser: 0,
+    RatioGPT3dot5: 2,
+    RatioGPT4: 30,
+    RatioGPT4_32k: 60,
     TopUpLink: ''
   });
   let originInputs = {};
@@ -90,6 +93,7 @@ const SystemSetting = () => {
       name === 'TurnstileSiteKey' ||
       name === 'TurnstileSecretKey' ||
       name === 'QuotaForNewUser' ||
+      name.startsWith('Ratio') ||
       name === 'TopUpLink'
     ) {
       setInputs((inputs) => ({ ...inputs, [name]: value }));
@@ -106,6 +110,15 @@ const SystemSetting = () => {
   const submitOperationConfig = async () => {
     if (originInputs['QuotaForNewUser'] !== inputs.QuotaForNewUser) {
       await updateOption('QuotaForNewUser', inputs.QuotaForNewUser);
+    }
+    if (originInputs['RatioGPT3dot5'] !== inputs.RatioGPT3dot5) {
+      await updateOption('RatioGPT3dot5', inputs.RatioGPT3dot5);
+    }
+    if (originInputs['RatioGPT4'] !== inputs.RatioGPT4) {
+      await updateOption('RatioGPT4', inputs.RatioGPT4);
+    }
+    if (originInputs['RatioGPT4_32k'] !== inputs.RatioGPT4_32k) {
+      await updateOption('RatioGPT4_32k', inputs.RatioGPT4_32k);
     }
     if (originInputs['TopUpLink'] !== inputs.TopUpLink) {
       await updateOption('TopUpLink', inputs.TopUpLink);
@@ -263,6 +276,41 @@ const SystemSetting = () => {
               value={inputs.TopUpLink}
               type='link'
               placeholder='例如发卡网站的购买链接'
+            />
+          </Form.Group>
+          <Form.Group widths={3}>
+            <Form.Input
+              label='GPT-3.5 系列模型倍率'
+              name='RatioGPT3dot5'
+              onChange={handleInputChange}
+              autoComplete='off'
+              value={inputs.RatioGPT3dot5}
+              type='number'
+              step='0.01'
+              min='0'
+              placeholder='例如：2'
+            />
+            <Form.Input
+              label='GPT-4 系列模型倍率'
+              name='RatioGPT4'
+              onChange={handleInputChange}
+              autoComplete='off'
+              value={inputs.RatioGPT4}
+              type='number'
+              step='0.01'
+              min='0'
+              placeholder='例如：30'
+            />
+            <Form.Input
+              label='GPT-4 32k 系列模型倍率'
+              name='RatioGPT4_32k'
+              onChange={handleInputChange}
+              autoComplete='off'
+              value={inputs.RatioGPT4_32k}
+              type='number'
+              step='0.01'
+              min='0'
+              placeholder='例如：60'
             />
           </Form.Group>
           <Form.Button onClick={submitOperationConfig}>保存运营设置</Form.Button>
