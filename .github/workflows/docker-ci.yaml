@@ -4,8 +4,8 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-  schedule:
-    - cron: 30 22 * * *
+  #schedule:
+   # - cron: 30 22 * * *
 
 jobs:
   build-and-push-image:
@@ -43,7 +43,7 @@ jobs:
           context: .
           push: true
           file: ./Dockerfile
-          #platforms: linux/arm64 ,linux/amd64
-          platforms: linux/amd64
+          platforms: linux/arm64 ,linux/amd64
+          #platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
