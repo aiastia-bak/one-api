@@ -20,7 +20,8 @@ jobs:
 
       - name: Save version info
         run: |
-          git describe --tags > VERSION 
+          #git describe --tags > VERSION 
+          date > VERSION
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
