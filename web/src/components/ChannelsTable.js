@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Form, Label, Pagination, Table } from 'semantic-ui-react';
+import { Button, Form, Label, Pagination, Popup, Table } from 'semantic-ui-react';
 import { Link } from 'react-router-dom';
-import { API, copy, showError, showSuccess, timestamp2string } from '../helpers';
+import { API, showError, showInfo, showSuccess, timestamp2string } from '../helpers';
 
 import { CHANNEL_OPTIONS, ITEMS_PER_PAGE } from '../constants';
 
@@ -120,6 +120,22 @@ const ChannelsTable = () => {
     }
   };
 
+  const renderResponseTime = (responseTime) => {
+    let time = responseTime / 1000;
+    time = time.toFixed(2) + " 秒";
+    if (responseTime === 0) {
+      return <Label basic color='grey'>未测试</Label>;
+    } else if (responseTime <= 1000) {
+      return <Label basic color='green'>{time}</Label>;
+    } else if (responseTime <= 3000) {
+      return <Label basic color='olive'>{time}</Label>;
+    } else if (responseTime <= 5000) {
+      return <Label basic color='yellow'>{time}</Label>;
+    } else {
+      return <Label basic color='red'>{time}</Label>;
+    }
+  };
+
   const searchChannels = async () => {
     if (searchKeyword === '') {
       // if keyword is blank, load files instead.
@@ -137,6 +153,21 @@ const ChannelsTable = () => {
       showError(message);
     }
     setSearching(false);
+  };
+
+  const testChannel = async (id, name, idx) => {
+    const res = await API.get(`/api/channel/test/${id}/`);
+    const { success, message, time } = res.data;
+    if (success) {
+      let newChannels = [...channels];
+      let realIdx = (activePage - 1) * ITEMS_PER_PAGE + idx;
+      newChannels[realIdx].response_time = time * 1000;
+      newChannels[realIdx].test_time = Date.now() / 1000;
+      setChannels(newChannels);
+      showInfo(`通道 ${name} 测试成功，耗时 ${time} 秒。`);
+    } else {
+      showError(message);
+    }
   };
 
   const handleKeywordChange = async (e, { value }) => {
@@ -209,18 +240,18 @@ const ChannelsTable = () => {
             <Table.HeaderCell
               style={{ cursor: 'pointer' }}
               onClick={() => {
-                sortChannel('created_time');
+                sortChannel('response_time');
               }}
             >
-              创建时间
+              响应时间
             </Table.HeaderCell>
             <Table.HeaderCell
               style={{ cursor: 'pointer' }}
               onClick={() => {
-                sortChannel('accessed_time');
+                sortChannel('test_time');
               }}
             >
-              访问时间
+              测试时间
             </Table.HeaderCell>
             <Table.HeaderCell>操作</Table.HeaderCell>
           </Table.Row>
@@ -240,19 +271,38 @@ const ChannelsTable = () => {
                   <Table.Cell>{channel.name ? channel.name : '无'}</Table.Cell>
                   <Table.Cell>{renderType(channel.type)}</Table.Cell>
                   <Table.Cell>{renderStatus(channel.status)}</Table.Cell>
-                  <Table.Cell>{renderTimestamp(channel.created_time)}</Table.Cell>
-                  <Table.Cell>{renderTimestamp(channel.accessed_time)}</Table.Cell>
+                  <Table.Cell>{renderResponseTime(channel.response_time)}</Table.Cell>
+                  <Table.Cell>{channel.test_time ? renderTimestamp(channel.test_time) : "未测试"}</Table.Cell>
                   <Table.Cell>
                     <div>
                       <Button
                         size={'small'}
-                        negative
+                        positive
                         onClick={() => {
-                          manageChannel(channel.id, 'delete', idx);
+                          testChannel(channel.id, channel.name, idx);
                         }}
                       >
-                        删除
+                        测试
                       </Button>
+                      <Popup
+                        trigger={
+                          <Button size='small' negative>
+                            删除
+                          </Button>
+                        }
+                        on='click'
+                        flowing
+                        hoverable
+                      >
+                        <Button
+                          negative
+                          onClick={() => {
+                            manageChannel(channel.id, 'delete', idx);
+                          }}
+                        >
+                          删除渠道 {channel.name}
+                        </Button>
+                      </Popup>
                       <Button
                         size={'small'}
                         onClick={() => {
