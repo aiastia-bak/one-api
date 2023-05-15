@@ -164,11 +164,21 @@ const ChannelsTable = () => {
       newChannels[realIdx].response_time = time * 1000;
       newChannels[realIdx].test_time = Date.now() / 1000;
       setChannels(newChannels);
-      showInfo(`通道 ${name} 测试成功，耗时 ${time} 秒。`);
+      showInfo(`通道 ${name} 测试成功，耗时 ${time.toFixed(2)} 秒。`);
     } else {
       showError(message);
     }
   };
+
+  const testAllChannels = async () => {
+    const res = await API.get(`/api/channel/test`);
+    const { success, message } = res.data;
+    if (success) {
+      showSuccess("已成功开始测试所有已启用通道，请刷新页面查看结果。");
+    } else {
+      showError(message);
+    }
+  }
 
   const handleKeywordChange = async (e, { value }) => {
     setSearchKeyword(value.trim());
@@ -334,6 +344,9 @@ const ChannelsTable = () => {
             <Table.HeaderCell colSpan='7'>
               <Button size='small' as={Link} to='/channel/add' loading={loading}>
                 添加新的渠道
+              </Button>
+              <Button size='small' loading={loading} onClick={testAllChannels}>
+                测试所有已启用通道
               </Button>
               <Pagination
                 floated='right'
