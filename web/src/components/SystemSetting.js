@@ -27,14 +27,18 @@ const SystemSetting = () => {
     TurnstileSecretKey: '',
     RegisterEnabled: '',
     QuotaForNewUser: 0,
+    QuotaRemindThreshold: 0,
+    PreConsumedQuota: 0,
     ModelRatio: '',
-    TopUpLink: ''
+    TopUpLink: '',
+    AutomaticDisableChannelEnabled: '',
+    ChannelDisableThreshold: 0,
   });
-  let originInputs = {};
+  const [originInputs, setOriginInputs] = useState({});
   let [loading, setLoading] = useState(false);
 
   const getOptions = async () => {
-    const res = await API.get('/api/option');
+    const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
       let newInputs = {};
@@ -42,7 +46,7 @@ const SystemSetting = () => {
         newInputs[item.key] = item.value;
       });
       setInputs(newInputs);
-      originInputs = newInputs;
+      setOriginInputs(newInputs);
     } else {
       showError(message);
     }
@@ -62,12 +66,13 @@ const SystemSetting = () => {
       case 'WeChatAuthEnabled':
       case 'TurnstileCheckEnabled':
       case 'RegisterEnabled':
+      case 'AutomaticDisableChannelEnabled':
         value = inputs[key] === 'true' ? 'false' : 'true';
         break;
       default:
         break;
     }
-    const res = await API.put('/api/option', {
+    const res = await API.put('/api/option/', {
       key,
       value
     });
@@ -93,6 +98,8 @@ const SystemSetting = () => {
       name === 'TurnstileSiteKey' ||
       name === 'TurnstileSecretKey' ||
       name === 'QuotaForNewUser' ||
+      name === 'QuotaRemindThreshold' ||
+      name === 'PreConsumedQuota' ||
       name === 'ModelRatio' ||
       name === 'TopUpLink'
     ) {
@@ -110,6 +117,12 @@ const SystemSetting = () => {
   const submitOperationConfig = async () => {
     if (originInputs['QuotaForNewUser'] !== inputs.QuotaForNewUser) {
       await updateOption('QuotaForNewUser', inputs.QuotaForNewUser);
+    }
+    if (originInputs['QuotaRemindThreshold'] !== inputs.QuotaRemindThreshold) {
+      await updateOption('QuotaRemindThreshold', inputs.QuotaRemindThreshold);
+    }
+    if (originInputs['PreConsumedQuota'] !== inputs.PreConsumedQuota) {
+      await updateOption('PreConsumedQuota', inputs.PreConsumedQuota);
     }
     if (originInputs['ModelRatio'] !== inputs.ModelRatio) {
       if (!verifyJSON(inputs.ModelRatio)) {
@@ -264,7 +277,7 @@ const SystemSetting = () => {
           <Header as='h3'>
             运营设置
           </Header>
-          <Form.Group widths={3}>
+          <Form.Group widths={4}>
             <Form.Input
               label='新用户初始配额'
               name='QuotaForNewUser'
@@ -284,6 +297,26 @@ const SystemSetting = () => {
               type='link'
               placeholder='例如发卡网站的购买链接'
             />
+            <Form.Input
+              label='额度提醒阈值'
+              name='QuotaRemindThreshold'
+              onChange={handleInputChange}
+              autoComplete='new-password'
+              value={inputs.QuotaRemindThreshold}
+              type='number'
+              min='0'
+              placeholder='低于此额度时将发送邮件提醒用户'
+            />
+            <Form.Input
+              label='请求预扣费额度'
+              name='PreConsumedQuota'
+              onChange={handleInputChange}
+              autoComplete='new-password'
+              value={inputs.PreConsumedQuota}
+              type='number'
+              min='0'
+              placeholder='请求结束后多退少补'
+            />
           </Form.Group>
           <Form.Group widths='equal'>
             <Form.TextArea
@@ -297,6 +330,30 @@ const SystemSetting = () => {
             />
           </Form.Group>
           <Form.Button onClick={submitOperationConfig}>保存运营设置</Form.Button>
+          <Divider />
+          <Header as='h3'>
+            监控设置
+          </Header>
+          <Form.Group widths={3}>
+            <Form.Input
+              label='最长响应时间'
+              name='ChannelDisableThreshold'
+              onChange={handleInputChange}
+              autoComplete='new-password'
+              value={inputs.ChannelDisableThreshold}
+              type='number'
+              min='0'
+              placeholder='单位秒，当运行通道全部测试时，超过此时间将自动禁用通道'
+            />
+          </Form.Group>
+          <Form.Group inline>
+            <Form.Checkbox
+              checked={inputs.AutomaticDisableChannelEnabled === 'true'}
+              label='失败时自动禁用通道'
+              name='AutomaticDisableChannelEnabled'
+              onChange={handleInputChange}
+            />
+          </Form.Group>
           <Divider />
           <Header as='h3'>
             配置 SMTP

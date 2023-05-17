@@ -467,6 +467,13 @@ func CreateUser(c *gin.Context) {
 		})
 		return
 	}
+	if err := common.Validate.Struct(&user); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "输入不合法 " + err.Error(),
+		})
+		return
+	}
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
@@ -651,6 +658,37 @@ func EmailBind(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
+	})
+	return
+}
+
+type topUpRequest struct {
+	Key string `json:"key"`
+}
+
+func TopUp(c *gin.Context) {
+	req := topUpRequest{}
+	err := c.ShouldBindJSON(&req)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	id := c.GetInt("id")
+	quota, err := model.Redeem(req.Key, id)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    quota,
 	})
 	return
 }

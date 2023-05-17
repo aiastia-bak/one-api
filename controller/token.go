@@ -100,7 +100,6 @@ func GetTokenStatus(c *gin.Context) {
 }
 
 func AddToken(c *gin.Context) {
-	isAdmin := c.GetInt("role") >= common.RoleAdminUser
 	token := model.Token{}
 	err := c.ShouldBindJSON(&token)
 	if err != nil {
@@ -118,27 +117,14 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	cleanToken := model.Token{
-		UserId:       c.GetInt("id"),
-		Name:         token.Name,
-		Key:          common.GetUUID(),
-		CreatedTime:  common.GetTimestamp(),
-		AccessedTime: common.GetTimestamp(),
-		ExpiredTime:  token.ExpiredTime,
-	}
-	if isAdmin {
-		cleanToken.RemainQuota = token.RemainQuota
-		cleanToken.UnlimitedQuota = token.UnlimitedQuota
-	} else {
-		userId := c.GetInt("id")
-		quota, err := model.GetUserQuota(userId)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-		cleanToken.RemainQuota = quota
+		UserId:         c.GetInt("id"),
+		Name:           token.Name,
+		Key:            common.GetUUID(),
+		CreatedTime:    common.GetTimestamp(),
+		AccessedTime:   common.GetTimestamp(),
+		ExpiredTime:    token.ExpiredTime,
+		RemainQuota:    token.RemainQuota,
+		UnlimitedQuota: token.UnlimitedQuota,
 	}
 	err = cleanToken.Insert()
 	if err != nil {
@@ -147,10 +133,6 @@ func AddToken(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
-	}
-	if !isAdmin {
-		// update user quota
-		err = model.DecreaseUserQuota(c.GetInt("id"), cleanToken.RemainQuota)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -178,7 +160,6 @@ func DeleteToken(c *gin.Context) {
 }
 
 func UpdateToken(c *gin.Context) {
-	isAdmin := c.GetInt("role") >= common.RoleAdminUser
 	userId := c.GetInt("id")
 	statusOnly := c.Query("status_only")
 	token := model.Token{}
@@ -209,7 +190,7 @@ func UpdateToken(c *gin.Context) {
 		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "令牌可用次数已用尽，无法启用，请先修改令牌剩余次数，或者设置为无限次数",
+				"message": "令牌可用额度已用尽，无法启用，请先修改令牌剩余额度，或者设置为无限额度",
 			})
 			return
 		}
@@ -220,10 +201,8 @@ func UpdateToken(c *gin.Context) {
 		// If you add more fields, please also update token.Update()
 		cleanToken.Name = token.Name
 		cleanToken.ExpiredTime = token.ExpiredTime
-		if isAdmin {
-			cleanToken.RemainQuota = token.RemainQuota
-			cleanToken.UnlimitedQuota = token.UnlimitedQuota
-		}
+		cleanToken.RemainQuota = token.RemainQuota
+		cleanToken.UnlimitedQuota = token.UnlimitedQuota
 	}
 	err = cleanToken.Update()
 	if err != nil {
@@ -237,37 +216,6 @@ func UpdateToken(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data":    cleanToken,
-	})
-	return
-}
-
-type topUpRequest struct {
-	Id  int    `json:"id"`
-	Key string `json:"key"`
-}
-
-func TopUp(c *gin.Context) {
-	req := topUpRequest{}
-	err := c.ShouldBindJSON(&req)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-	quota, err := model.Redeem(req.Key, req.Id)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    quota,
 	})
 	return
 }

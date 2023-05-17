@@ -31,6 +31,11 @@ const headerButtons = [
     admin: true,
   },
   {
+    name: '充值',
+    to: '/topup',
+    icon: 'cart',
+  },
+  {
     name: '用户',
     to: '/user',
     icon: 'user',

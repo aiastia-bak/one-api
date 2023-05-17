@@ -9,7 +9,7 @@ import NotFound from './pages/NotFound';
 import Setting from './pages/Setting';
 import EditUser from './pages/User/EditUser';
 import AddUser from './pages/User/AddUser';
-import { API, showError, showNotice } from './helpers';
+import { API, getLogo, getSystemName, showError, showNotice } from './helpers';
 import PasswordResetForm from './components/PasswordResetForm';
 import GitHubOAuth from './components/GitHubOAuth';
 import PasswordResetConfirm from './components/PasswordResetConfirm';
@@ -21,6 +21,7 @@ import EditToken from './pages/Token/EditToken';
 import EditChannel from './pages/Channel/EditChannel';
 import Redemption from './pages/Redemption';
 import EditRedemption from './pages/Redemption/EditRedemption';
+import TopUp from './pages/TopUp';
 
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
@@ -62,6 +63,17 @@ function App() {
   useEffect(() => {
     loadUser();
     loadStatus().then();
+    let systemName = getSystemName();
+    if (systemName) {
+      document.title = systemName;
+    }
+    let logo = getLogo();
+    if (logo) {
+      let linkElement = document.querySelector("link[rel~='icon']");
+      if (linkElement) {
+        linkElement.href = logo;
+      }
+    }
   }, []);
 
   return (
@@ -226,6 +238,16 @@ function App() {
               <Setting />
             </Suspense>
           </PrivateRoute>
+        }
+      />
+      <Route
+        path='/topup'
+        element={
+        <PrivateRoute>
+          <Suspense fallback={<Loading></Loading>}>
+            <TopUp />
+          </Suspense>
+        </PrivateRoute>
         }
       />
       <Route

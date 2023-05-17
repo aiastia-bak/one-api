@@ -50,7 +50,13 @@ var WeChatAccountQRCodeImageURL = ""
 var TurnstileSiteKey = ""
 var TurnstileSecretKey = ""
 
-var QuotaForNewUser = 100
+var QuotaForNewUser = 0
+var ChannelDisableThreshold = 5.0
+var AutomaticDisableChannelEnabled = false
+var QuotaRemindThreshold = 1000
+var PreConsumedQuota = 500
+
+var RootUserEmail = ""
 
 const (
 	RoleGuestUser  = 0
