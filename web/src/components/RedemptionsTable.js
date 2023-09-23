@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Form, Label, Message, Pagination, Table } from 'semantic-ui-react';
+import { Button, Form, Label, Popup, Pagination, Table } from 'semantic-ui-react';
 import { Link } from 'react-router-dom';
 import { API, copy, showError, showInfo, showSuccess, showWarning, timestamp2string } from '../helpers';
 
 import { ITEMS_PER_PAGE } from '../constants';
+import { renderQuota } from '../helpers/render';
 
 function renderTimestamp(timestamp) {
   return (
@@ -152,7 +153,7 @@ const RedemptionsTable = () => {
         />
       </Form>
 
-      <Table basic>
+      <Table basic compact size='small'>
         <Table.Header>
           <Table.Row>
             <Table.HeaderCell
@@ -220,7 +221,7 @@ const RedemptionsTable = () => {
                   <Table.Cell>{redemption.id}</Table.Cell>
                   <Table.Cell>{redemption.name ? redemption.name : '无'}</Table.Cell>
                   <Table.Cell>{renderStatus(redemption.status)}</Table.Cell>
-                  <Table.Cell>{redemption.quota}</Table.Cell>
+                  <Table.Cell>{renderQuota(redemption.quota)}</Table.Cell>
                   <Table.Cell>{renderTimestamp(redemption.created_time)}</Table.Cell>
                   <Table.Cell>{redemption.redeemed_time ? renderTimestamp(redemption.redeemed_time) : "尚未兑换"} </Table.Cell>
                   <Table.Cell>
@@ -239,15 +240,25 @@ const RedemptionsTable = () => {
                       >
                         复制
                       </Button>
-                      <Button
-                        size={'small'}
-                        negative
-                        onClick={() => {
-                          manageRedemption(redemption.id, 'delete', idx);
-                        }}
+                      <Popup
+                        trigger={
+                          <Button size='small' negative>
+                            删除
+                          </Button>
+                        }
+                        on='click'
+                        flowing
+                        hoverable
                       >
-                        删除
-                      </Button>
+                        <Button
+                          negative
+                          onClick={() => {
+                            manageRedemption(redemption.id, 'delete', idx);
+                          }}
+                        >
+                          确认删除
+                        </Button>
+                      </Popup>
                       <Button
                         size={'small'}
                         disabled={redemption.status === 3}  // used

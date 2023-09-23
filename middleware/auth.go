@@ -85,31 +85,27 @@ func RootAuth() func(c *gin.Context) {
 func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		key := c.Request.Header.Get("Authorization")
+		key = strings.TrimPrefix(key, "Bearer ")
+		key = strings.TrimPrefix(key, "sk-")
 		parts := strings.Split(key, "-")
 		key = parts[0]
 		token, err := model.ValidateUserToken(key)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"error": gin.H{
-					"message": err.Error(),
-					"type":    "one_api_error",
-				},
-			})
-			c.Abort()
+			abortWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}
-		if !model.IsUserEnabled(token.UserId) {
-			c.JSON(http.StatusOK, gin.H{
-				"error": gin.H{
-					"message": "用户已被封禁",
-					"type":    "one_api_error",
-				},
-			})
-			c.Abort()
+		userEnabled, err := model.IsUserEnabled(token.UserId)
+		if err != nil {
+			abortWithMessage(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !userEnabled {
+			abortWithMessage(c, http.StatusForbidden, "用户已被封禁")
 			return
 		}
 		c.Set("id", token.UserId)
 		c.Set("token_id", token.Id)
+		c.Set("token_name", token.Name)
 		requestURL := c.Request.URL.String()
 		consumeQuota := true
 		if strings.HasPrefix(requestURL, "/v1/models") {
@@ -120,13 +116,7 @@ func TokenAuth() func(c *gin.Context) {
 			if model.IsAdmin(token.UserId) {
 				c.Set("channelId", parts[1])
 			} else {
-				c.JSON(http.StatusOK, gin.H{
-					"error": gin.H{
-						"message": "普通用户不支持指定渠道",
-						"type":    "one_api_error",
-					},
-				})
-				c.Abort()
+				abortWithMessage(c, http.StatusForbidden, "普通用户不支持指定渠道")
 				return
 			}
 		}

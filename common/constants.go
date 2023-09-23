@@ -1,9 +1,12 @@
 package common
 
 import (
-	"github.com/google/uuid"
+	"os"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var StartTime = time.Now().Unix() // unit: second
@@ -13,6 +16,10 @@ var ServerAddress = "http://localhost:3000"
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
+var ChatLink = ""
+var QuotaPerUnit = 500 * 1000.0 // $0.002 / 1K tokens
+var DisplayInCurrencyEnabled = true
+var DisplayTokenStatEnabled = true
 
 var UsingSQLite = false
 
@@ -25,6 +32,7 @@ var OptionMap map[string]string
 var OptionMapRWMutex sync.RWMutex
 
 var ItemsPerPage = 10
+var MaxRecentItems = 100
 
 var PasswordLoginEnabled = true
 var PasswordRegisterEnabled = true
@@ -33,6 +41,23 @@ var GitHubOAuthEnabled = false
 var WeChatAuthEnabled = false
 var TurnstileCheckEnabled = false
 var RegisterEnabled = true
+
+var EmailDomainRestrictionEnabled = false
+var EmailDomainWhitelist = []string{
+	"gmail.com",
+	"163.com",
+	"126.com",
+	"qq.com",
+	"outlook.com",
+	"hotmail.com",
+	"icloud.com",
+	"yahoo.com",
+	"foxmail.com",
+}
+
+var DebugEnabled = os.Getenv("DEBUG") == "true"
+
+var LogConsumeEnabled = true
 
 var SMTPServer = ""
 var SMTPPort = 587
@@ -51,12 +76,30 @@ var TurnstileSiteKey = ""
 var TurnstileSecretKey = ""
 
 var QuotaForNewUser = 0
+var QuotaForInviter = 0
+var QuotaForInvitee = 0
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var QuotaRemindThreshold = 1000
 var PreConsumedQuota = 500
+var ApproximateTokenEnabled = false
+var RetryTimes = 0
 
 var RootUserEmail = ""
+
+var IsMasterNode = os.Getenv("NODE_TYPE") != "slave"
+
+var requestInterval, _ = strconv.Atoi(os.Getenv("POLLING_INTERVAL"))
+var RequestInterval = time.Duration(requestInterval) * time.Second
+
+var SyncFrequency = 10 * 60 // unit is second, will be overwritten by SYNC_FREQUENCY
+
+var BatchUpdateEnabled = false
+var BatchUpdateInterval = GetOrDefault("BATCH_UPDATE_INTERVAL", 5)
+
+const (
+	RequestIdKey = "X-Oneapi-Request-Id"
+)
 
 const (
 	RoleGuestUser  = 0
@@ -75,10 +118,10 @@ var (
 // All duration's unit is seconds
 // Shouldn't larger then RateLimitKeyExpirationDuration
 var (
-	GlobalApiRateLimitNum            = 180
+	GlobalApiRateLimitNum            = GetOrDefault("GLOBAL_API_RATE_LIMIT", 180)
 	GlobalApiRateLimitDuration int64 = 3 * 60
 
-	GlobalWebRateLimitNum            = 60
+	GlobalWebRateLimitNum            = GetOrDefault("GLOBAL_WEB_RATE_LIMIT", 60)
 	GlobalWebRateLimitDuration int64 = 3 * 60
 
 	UploadRateLimitNum            = 10
@@ -118,25 +161,53 @@ const (
 )
 
 const (
-	ChannelTypeUnknown   = 0
-	ChannelTypeOpenAI    = 1
-	ChannelTypeAPI2D     = 2
-	ChannelTypeAzure     = 3
-	ChannelTypeCloseAI   = 4
-	ChannelTypeOpenAISB  = 5
-	ChannelTypeOpenAIMax = 6
-	ChannelTypeOhMyGPT   = 7
-	ChannelTypeCustom    = 8
+	ChannelTypeUnknown        = 0
+	ChannelTypeOpenAI         = 1
+	ChannelTypeAPI2D          = 2
+	ChannelTypeAzure          = 3
+	ChannelTypeCloseAI        = 4
+	ChannelTypeOpenAISB       = 5
+	ChannelTypeOpenAIMax      = 6
+	ChannelTypeOhMyGPT        = 7
+	ChannelTypeCustom         = 8
+	ChannelTypeAILS           = 9
+	ChannelTypeAIProxy        = 10
+	ChannelTypePaLM           = 11
+	ChannelTypeAPI2GPT        = 12
+	ChannelTypeAIGC2D         = 13
+	ChannelTypeAnthropic      = 14
+	ChannelTypeBaidu          = 15
+	ChannelTypeZhipu          = 16
+	ChannelTypeAli            = 17
+	ChannelTypeXunfei         = 18
+	ChannelType360            = 19
+	ChannelTypeOpenRouter     = 20
+	ChannelTypeAIProxyLibrary = 21
+	ChannelTypeFastGPT        = 22
 )
 
 var ChannelBaseURLs = []string{
-	"",                            // 0
-	"https://api.openai.com",      // 1
-	"https://openai.api2d.net",    // 2
-	"",                            // 3
-	"https://api.openai-asia.com", // 4
-	"https://api.openai-sb.com",   // 5
-	"https://api.openaimax.com",   // 6
-	"https://api.ohmygpt.com",     // 7
-	"",                            // 8
+	"",                                // 0
+	"https://api.openai.com",          // 1
+	"https://oa.api2d.net",            // 2
+	"",                                // 3
+	"https://api.closeai-proxy.xyz",   // 4
+	"https://api.openai-sb.com",       // 5
+	"https://api.openaimax.com",       // 6
+	"https://api.ohmygpt.com",         // 7
+	"",                                // 8
+	"https://api.caipacity.com",       // 9
+	"https://api.aiproxy.io",          // 10
+	"",                                // 11
+	"https://api.api2gpt.com",         // 12
+	"https://api.aigc2d.com",          // 13
+	"https://api.anthropic.com",       // 14
+	"https://aip.baidubce.com",        // 15
+	"https://open.bigmodel.cn",        // 16
+	"https://dashscope.aliyuncs.com",  // 17
+	"",                                // 18
+	"https://ai.360.cn",               // 19
+	"https://openrouter.ai/api",       // 20
+	"https://api.aiproxy.io",          // 21
+	"https://fastgpt.run/api/openapi", // 22
 }

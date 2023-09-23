@@ -1,23 +1,66 @@
 package controller
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/pkoukk/tiktoken-go"
-	"io"
 	"net/http"
 	"one-api/common"
-	"one-api/model"
+	"strconv"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string  `json:"role"`
+	Content string  `json:"content"`
+	Name    *string `json:"name,omitempty"`
+}
+
+const (
+	RelayModeUnknown = iota
+	RelayModeChatCompletions
+	RelayModeCompletions
+	RelayModeEmbeddings
+	RelayModeModerations
+	RelayModeImagesGenerations
+	RelayModeEdits
+	RelayModeAudio
+)
+
+// https://platform.openai.com/docs/api-reference/chat
+
+type GeneralOpenAIRequest struct {
+	Model       string    `json:"model,omitempty"`
+	Messages    []Message `json:"messages,omitempty"`
+	Prompt      any       `json:"prompt,omitempty"`
+	Stream      bool      `json:"stream,omitempty"`
+	MaxTokens   int       `json:"max_tokens,omitempty"`
+	Temperature float64   `json:"temperature,omitempty"`
+	TopP        float64   `json:"top_p,omitempty"`
+	N           int       `json:"n,omitempty"`
+	Input       any       `json:"input,omitempty"`
+	Instruction string    `json:"instruction,omitempty"`
+	Size        string    `json:"size,omitempty"`
+	Functions   any       `json:"functions,omitempty"`
+}
+
+func (r GeneralOpenAIRequest) ParseInput() []string {
+	if r.Input == nil {
+		return nil
+	}
+	var input []string
+	switch r.Input.(type) {
+	case string:
+		input = []string{r.Input.(string)}
+	case []any:
+		input = make([]string, 0, len(r.Input.([]any)))
+		for _, item := range r.Input.([]any) {
+			if str, ok := item.(string); ok {
+				input = append(input, str)
+			}
+		}
+	}
+	return input
 }
 
 type ChatRequest struct {
@@ -34,6 +77,16 @@ type TextRequest struct {
 	//Stream   bool      `json:"stream"`
 }
 
+type ImageRequest struct {
+	Prompt string `json:"prompt"`
+	N      int    `json:"n"`
+	Size   string `json:"size"`
+}
+
+type AudioResponse struct {
+	Text string `json:"text,omitempty"`
+}
+
 type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
@@ -44,263 +97,153 @@ type OpenAIError struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
 	Param   string `json:"param"`
-	Code    string `json:"code"`
+	Code    any    `json:"code"`
+}
+
+type OpenAIErrorWithStatusCode struct {
+	OpenAIError
+	StatusCode int `json:"status_code"`
 }
 
 type TextResponse struct {
-	Usage `json:"usage"`
-	Error OpenAIError `json:"error"`
+	Choices []OpenAITextResponseChoice `json:"choices"`
+	Usage   `json:"usage"`
+	Error   OpenAIError `json:"error"`
 }
 
-type StreamResponse struct {
+type OpenAITextResponseChoice struct {
+	Index        int `json:"index"`
+	Message      `json:"message"`
+	FinishReason string `json:"finish_reason"`
+}
+
+type OpenAITextResponse struct {
+	Id      string                     `json:"id"`
+	Object  string                     `json:"object"`
+	Created int64                      `json:"created"`
+	Choices []OpenAITextResponseChoice `json:"choices"`
+	Usage   `json:"usage"`
+}
+
+type OpenAIEmbeddingResponseItem struct {
+	Object    string    `json:"object"`
+	Index     int       `json:"index"`
+	Embedding []float64 `json:"embedding"`
+}
+
+type OpenAIEmbeddingResponse struct {
+	Object string                        `json:"object"`
+	Data   []OpenAIEmbeddingResponseItem `json:"data"`
+	Model  string                        `json:"model"`
+	Usage  `json:"usage"`
+}
+
+type ImageResponse struct {
+	Created int `json:"created"`
+	Data    []struct {
+		Url string `json:"url"`
+	}
+}
+
+type ChatCompletionsStreamResponseChoice struct {
+	Delta struct {
+		Content string `json:"content"`
+	} `json:"delta"`
+	FinishReason *string `json:"finish_reason"`
+}
+
+type ChatCompletionsStreamResponse struct {
+	Id      string                                `json:"id"`
+	Object  string                                `json:"object"`
+	Created int64                                 `json:"created"`
+	Model   string                                `json:"model"`
+	Choices []ChatCompletionsStreamResponseChoice `json:"choices"`
+}
+
+type CompletionsStreamResponse struct {
 	Choices []struct {
-		Delta struct {
-			Content string `json:"content"`
-		} `json:"delta"`
+		Text         string `json:"text"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 }
 
-var tokenEncoder, _ = tiktoken.GetEncoding("cl100k_base")
-
-func countToken(text string) int {
-	token := tokenEncoder.Encode(text, nil, nil)
-	return len(token)
-}
-
 func Relay(c *gin.Context) {
-	err := relayHelper(c)
+	relayMode := RelayModeUnknown
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/chat/completions") {
+		relayMode = RelayModeChatCompletions
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/completions") {
+		relayMode = RelayModeCompletions
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/embeddings") {
+		relayMode = RelayModeEmbeddings
+	} else if strings.HasSuffix(c.Request.URL.Path, "embeddings") {
+		relayMode = RelayModeEmbeddings
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/moderations") {
+		relayMode = RelayModeModerations
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") {
+		relayMode = RelayModeImagesGenerations
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/edits") {
+		relayMode = RelayModeEdits
+	} else if strings.HasPrefix(c.Request.URL.Path, "/v1/audio") {
+		relayMode = RelayModeAudio
+	}
+	var err *OpenAIErrorWithStatusCode
+	switch relayMode {
+	case RelayModeImagesGenerations:
+		err = relayImageHelper(c, relayMode)
+	case RelayModeAudio:
+		err = relayAudioHelper(c, relayMode)
+	default:
+		err = relayTextHelper(c, relayMode)
+	}
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "one_api_error",
-			},
-		})
-		if common.AutomaticDisableChannelEnabled {
+		requestId := c.GetString(common.RequestIdKey)
+		retryTimesStr := c.Query("retry")
+		retryTimes, _ := strconv.Atoi(retryTimesStr)
+		if retryTimesStr == "" {
+			retryTimes = common.RetryTimes
+		}
+		if retryTimes > 0 {
+			c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("%s?retry=%d", c.Request.URL.Path, retryTimes-1))
+		} else {
+			if err.StatusCode == http.StatusTooManyRequests {
+				err.OpenAIError.Message = "当前分组上游负载已饱和，请稍后再试"
+			}
+			err.OpenAIError.Message = common.MessageWithRequestId(err.OpenAIError.Message, requestId)
+			c.JSON(err.StatusCode, gin.H{
+				"error": err.OpenAIError,
+			})
+		}
+		channelId := c.GetInt("channel_id")
+		common.LogError(c.Request.Context(), fmt.Sprintf("relay error (channel #%d): %s", channelId, err.Message))
+		// https://platform.openai.com/docs/guides/error-codes/api-errors
+		if shouldDisableChannel(&err.OpenAIError, err.StatusCode) {
 			channelId := c.GetInt("channel_id")
 			channelName := c.GetString("channel_name")
-			disableChannel(channelId, channelName, err)
+			disableChannel(channelId, channelName, err.Message)
 		}
-	}
-}
-
-func relayHelper(c *gin.Context) error {
-	channelType := c.GetInt("channel")
-	tokenId := c.GetInt("token_id")
-	consumeQuota := c.GetBool("consume_quota")
-	var textRequest TextRequest
-	if consumeQuota || channelType == common.ChannelTypeAzure {
-		requestBody, err := io.ReadAll(c.Request.Body)
-		if err != nil {
-			return err
-		}
-		err = c.Request.Body.Close()
-		if err != nil {
-			return err
-		}
-		err = json.Unmarshal(requestBody, &textRequest)
-		if err != nil {
-			return err
-		}
-		// Reset request body
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
-	}
-	baseURL := common.ChannelBaseURLs[channelType]
-	requestURL := c.Request.URL.String()
-	if channelType == common.ChannelTypeCustom {
-		baseURL = c.GetString("base_url")
-	}
-	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
-	if channelType == common.ChannelTypeAzure {
-		// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
-		query := c.Request.URL.Query()
-		apiVersion := query.Get("api-version")
-		if apiVersion == "" {
-			apiVersion = c.GetString("api_version")
-		}
-		requestURL := strings.Split(requestURL, "?")[0]
-		requestURL = fmt.Sprintf("%s?api-version=%s", requestURL, apiVersion)
-		baseURL = c.GetString("base_url")
-		task := strings.TrimPrefix(requestURL, "/v1/")
-		model_ := textRequest.Model
-		model_ = strings.Replace(model_, ".", "", -1)
-		// https://github.com/songquanpeng/one-api/issues/67
-		model_ = strings.TrimSuffix(model_, "-0301")
-		model_ = strings.TrimSuffix(model_, "-0314")
-		fullRequestURL = fmt.Sprintf("%s/openai/deployments/%s/%s", baseURL, model_, task)
-	}
-	var promptText string
-	for _, message := range textRequest.Messages {
-		promptText += fmt.Sprintf("%s: %s\n", message.Role, message.Content)
-	}
-	promptTokens := countToken(promptText) + 3
-	preConsumedTokens := common.PreConsumedQuota
-	if textRequest.MaxTokens != 0 {
-		preConsumedTokens = promptTokens + textRequest.MaxTokens
-	}
-	ratio := common.GetModelRatio(textRequest.Model)
-	preConsumedQuota := int(float64(preConsumedTokens) * ratio)
-	if consumeQuota {
-		err := model.PreConsumeTokenQuota(tokenId, preConsumedQuota)
-		if err != nil {
-			return err
-		}
-	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, c.Request.Body)
-	if err != nil {
-		return err
-	}
-	if channelType == common.ChannelTypeAzure {
-		key := c.Request.Header.Get("Authorization")
-		key = strings.TrimPrefix(key, "Bearer ")
-		req.Header.Set("api-key", key)
-	} else {
-		req.Header.Set("Authorization", c.Request.Header.Get("Authorization"))
-	}
-	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
-	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
-	req.Header.Set("Connection", c.Request.Header.Get("Connection"))
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	err = req.Body.Close()
-	if err != nil {
-		return err
-	}
-	err = c.Request.Body.Close()
-	if err != nil {
-		return err
-	}
-	var textResponse TextResponse
-	isStream := resp.Header.Get("Content-Type") == "text/event-stream"
-	var streamResponseText string
-
-	defer func() {
-		if consumeQuota {
-			quota := 0
-			usingGPT4 := strings.HasPrefix(textRequest.Model, "gpt-4")
-			completionRatio := 1
-			if usingGPT4 {
-				completionRatio = 2
-			}
-			if isStream {
-				completionText := fmt.Sprintf("%s: %s\n", "assistant", streamResponseText)
-				quota = promptTokens + countToken(completionText)*completionRatio
-			} else {
-				quota = textResponse.Usage.PromptTokens + textResponse.Usage.CompletionTokens*completionRatio
-			}
-			quota = int(float64(quota) * ratio)
-			quotaDelta := quota - preConsumedQuota
-			err := model.PostConsumeTokenQuota(tokenId, quotaDelta)
-			if err != nil {
-				common.SysError("Error consuming token remain quota: " + err.Error())
-			}
-		}
-	}()
-
-	if isStream {
-		scanner := bufio.NewScanner(resp.Body)
-		scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-			if atEOF && len(data) == 0 {
-				return 0, nil, nil
-			}
-
-			if i := strings.Index(string(data), "\n\n"); i >= 0 {
-				return i + 2, data[0:i], nil
-			}
-
-			if atEOF {
-				return len(data), data, nil
-			}
-
-			return 0, nil, nil
-		})
-		dataChan := make(chan string)
-		stopChan := make(chan bool)
-		go func() {
-			for scanner.Scan() {
-				data := scanner.Text()
-				dataChan <- data
-				data = data[6:]
-				if !strings.HasPrefix(data, "[DONE]") {
-					var streamResponse StreamResponse
-					err = json.Unmarshal([]byte(data), &streamResponse)
-					if err != nil {
-						common.SysError("Error unmarshalling stream response: " + err.Error())
-						return
-					}
-					for _, choice := range streamResponse.Choices {
-						streamResponseText += choice.Delta.Content
-					}
-				}
-			}
-			stopChan <- true
-		}()
-		c.Writer.Header().Set("Content-Type", "text/event-stream")
-		c.Writer.Header().Set("Cache-Control", "no-cache")
-		c.Writer.Header().Set("Connection", "keep-alive")
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		c.Stream(func(w io.Writer) bool {
-			select {
-			case data := <-dataChan:
-				if strings.HasPrefix(data, "data: [DONE]") {
-					data = data[:12]
-				}
-				c.Render(-1, common.CustomEvent{Data: data})
-				return true
-			case <-stopChan:
-				return false
-			}
-		})
-		err = resp.Body.Close()
-		if err != nil {
-			return err
-		}
-		return nil
-	} else {
-		for k, v := range resp.Header {
-			c.Writer.Header().Set(k, v[0])
-		}
-		if consumeQuota {
-			responseBody, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return err
-			}
-			err = resp.Body.Close()
-			if err != nil {
-				return err
-			}
-			err = json.Unmarshal(responseBody, &textResponse)
-			if err != nil {
-				return err
-			}
-			if textResponse.Error.Type != "" {
-				return errors.New(fmt.Sprintf("type %s, code %s, message %s",
-					textResponse.Error.Type, textResponse.Error.Code, textResponse.Error.Message))
-			}
-			// Reset response body
-			resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
-		}
-		_, err = io.Copy(c.Writer, resp.Body)
-		if err != nil {
-			return err
-		}
-		err = resp.Body.Close()
-		if err != nil {
-			return err
-		}
-		return nil
 	}
 }
 
 func RelayNotImplemented(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"error": gin.H{
-			"message": "Not Implemented",
-			"type":    "one_api_error",
-		},
+	err := OpenAIError{
+		Message: "API not implemented",
+		Type:    "one_api_error",
+		Param:   "",
+		Code:    "api_not_implemented",
+	}
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"error": err,
+	})
+}
+
+func RelayNotFound(c *gin.Context) {
+	err := OpenAIError{
+		Message: fmt.Sprintf("Invalid URL (%s %s)", c.Request.Method, c.Request.URL.Path),
+		Type:    "invalid_request_error",
+		Param:   "",
+		Code:    "",
+	}
+	c.JSON(http.StatusNotFound, gin.H{
+		"error": err,
 	})
 }
