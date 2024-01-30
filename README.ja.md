@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/songquanpeng/one-api"><img src="https://raw.githubusercontent.com/songquanpeng/one-api/main/web/public/logo.png" width="150" height="150" alt="one-api logo"></a>
+  <a href="https://github.com/songquanpeng/one-api"><img src="https://raw.githubusercontent.com/songquanpeng/one-api/main/web/default/public/logo.png" width="150" height="150" alt="one-api logo"></a>
 </p>
 
 <div align="center">
@@ -60,7 +60,7 @@ _✨ 標準的な OpenAI API フォーマットを通じてすべての LLM に�
 1. 複数の大型モデルをサポート:
    + [x] [OpenAI ChatGPT シリーズモデル](https://platform.openai.com/docs/guides/gpt/chat-completions-api) ([Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference) をサポート)
    + [x] [Anthropic Claude シリーズモデル](https://anthropic.com)
-   + [x] [Google PaLM2 シリーズモデル](https://developers.generativeai.google)
+   + [x] [Google PaLM2/Gemini シリーズモデル](https://developers.generativeai.google)
    + [x] [Baidu Wenxin Yiyuan シリーズモデル](https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html)
    + [x] [Alibaba Tongyi Qianwen シリーズモデル](https://help.aliyun.com/document_detail/2400395.html)
    + [x] [Zhipu ChatGLM シリーズモデル](https://bigmodel.cn)
@@ -135,12 +135,12 @@ sudo service nginx restart
    git clone https://github.com/songquanpeng/one-api.git
 
    # フロントエンドのビルド
-   cd one-api/web
+   cd one-api/web/default
    npm install
    npm run build
 
    # バックエンドのビルド
-   cd ..
+   cd ../..
    go mod download
    go build -ldflags "-s -w" -o one-api
    ```

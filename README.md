@@ -4,7 +4,7 @@
 
 
 <p align="center">
-  <a href="https://github.com/songquanpeng/one-api"><img src="https://raw.githubusercontent.com/songquanpeng/one-api/main/web/public/logo.png" width="150" height="150" alt="one-api logo"></a>
+  <a href="https://github.com/songquanpeng/one-api"><img src="https://raw.githubusercontent.com/songquanpeng/one-api/main/web/default/public/logo.png" width="150" height="150" alt="one-api logo"></a>
 </p>
 
 <div align="center">
@@ -66,20 +66,14 @@ _✨ 通过标准的 OpenAI API 格式访问所有的大模型，开箱即用 �
 1. 支持多种大模型：
    + [x] [OpenAI ChatGPT 系列模型](https://platform.openai.com/docs/guides/gpt/chat-completions-api)（支持 [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)）
    + [x] [Anthropic Claude 系列模型](https://anthropic.com)
-   + [x] [Google PaLM2 系列模型](https://developers.generativeai.google)
+   + [x] [Google PaLM2/Gemini 系列模型](https://developers.generativeai.google)
    + [x] [百度文心一言系列模型](https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html)
    + [x] [阿里通义千问系列模型](https://help.aliyun.com/document_detail/2400395.html)
    + [x] [讯飞星火认知大模型](https://www.xfyun.cn/doc/spark/Web.html)
    + [x] [智谱 ChatGLM 系列模型](https://bigmodel.cn)
    + [x] [360 智脑](https://ai.360.cn)
    + [x] [腾讯混元大模型](https://cloud.tencent.com/document/product/1729)
-2. 支持配置镜像以及众多第三方代理服务：
-   + [x] [OpenAI-SB](https://openai-sb.com)
-   + [x] [CloseAI](https://referer.shadowai.xyz/r/2412)
-   + [x] [API2D](https://api2d.com/r/197971)
-   + [x] [OhMyGPT](https://aigptx.top?aff=uFpUl2Kf)
-   + [x] [AI Proxy](https://aiproxy.io/?i=OneAPI) （邀请码：`OneAPI`）
-   + [x] 自定义渠道：例如各种未收录的第三方代理服务
+2. 支持配置镜像以及众多[第三方代理服务](https://iamazing.cn/page/openai-api-third-party-services)。
 3. 支持通过**负载均衡**的方式访问多个渠道。
 4. 支持 **stream 模式**，可以通过流式传输实现打字机效果。
 5. 支持**多机部署**，[详见此处](#多机部署)。
@@ -105,6 +99,7 @@ _✨ 通过标准的 OpenAI API 格式访问所有的大模型，开箱即用 �
     + 邮箱登录注册（支持注册邮箱白名单）以及通过邮箱进行密码重置。
     + [GitHub 开放授权](https://github.com/settings/applications/new)。
     + 微信公众号授权（需要额外部署 [WeChat Server](https://github.com/songquanpeng/wechat-server)）。
+23. 支持主题切换，设置环境变量 `THEME` 即可，默认为 `default`，欢迎 PR 更多主题，具体参考[此处](./web/README.md)。
 
 ## 部署
 ### 基于 Docker 进行部署
@@ -179,12 +174,12 @@ docker-compose ps
    git clone https://github.com/songquanpeng/one-api.git
    
    # 构建前端
-   cd one-api/web
+   cd one-api/web/default
    npm install
    npm run build
    
    # 构建后端
-   cd ..
+   cd ../..
    go mod download
    go build -ldflags "-s -w" -o one-api
    ````
@@ -371,6 +366,9 @@ graph LR
     + `TIKTOKEN_CACHE_DIR`：默认程序启动时会联网下载一些通用的词元的编码，如：`gpt-3.5-turbo`，在一些网络环境不稳定，或者离线情况，可能会导致启动有问题，可以配置此目录缓存数据，可迁移到离线环境。
     + `DATA_GYM_CACHE_DIR`：目前该配置作用与 `TIKTOKEN_CACHE_DIR` 一致，但是优先级没有它高。
 15. `RELAY_TIMEOUT`：中继超时设置，单位为秒，默认不设置超时时间。
+16. `SQLITE_BUSY_TIMEOUT`：SQLite 锁等待超时设置，单位为毫秒，默认 `3000`。
+17. `GEMINI_SAFETY_SETTING`：Gemini 的安全设置，默认 `BLOCK_NONE`。
+18. `THEME`：系统的主题设置，默认为 `default`，具体可选值参考[此处](./web/README.md)。
 
 ### 命令行参数
 1. `--port <port_number>`: 指定服务器监听的端口号，默认为 `3000`。
@@ -416,6 +414,9 @@ https://openai.justsong.cn
 8. 升级之前数据库需要做变更吗？
    + 一般情况下不需要，系统将在初始化的时候自动调整。
    + 如果需要的话，我会在更新日志中说明，并给出脚本。
+9. 手动修改数据库后报错：`数据库一致性已被破坏，请联系管理员`？
+   + 这是检测到 ability 表里有些记录的通道 id 是不存在的，这大概率是因为你删了 channel 表里的记录但是没有同步在 ability 表里清理无效的通道。
+   + 对于每一个通道，其所支持的模型都需要有一个专门的 ability 表的记录，表示该通道支持该模型。
 
 ## 相关项目
 * [FastGPT](https://github.com/labring/FastGPT): 基于 LLM 大语言模型的知识库问答系统
