@@ -6,13 +6,15 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/client"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/middleware"
 	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/channel/openai"
+	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/router"
 	"os"
 	"strconv"
@@ -22,18 +24,25 @@ import (
 var buildFS embed.FS
 
 func main() {
+	common.Init()
 	logger.SetupLogger()
-	logger.SysLog(fmt.Sprintf("One API %s started", common.Version))
-	if os.Getenv("GIN_MODE") != "debug" {
+	logger.SysLogf("One API %s started", common.Version)
+
+	if os.Getenv("GIN_MODE") != gin.DebugMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	if config.DebugEnabled {
 		logger.SysLog("running in debug mode")
 	}
+
 	// Initialize SQL Database
-	err := model.InitDB()
+	model.InitDB()
+	model.InitLogDB()
+
+	var err error
+	err = model.CreateRootAccountIfNeed()
 	if err != nil {
-		logger.FatalLog("failed to initialize database: " + err.Error())
+		logger.FatalLog("database init error: " + err.Error())
 	}
 	defer func() {
 		err := model.CloseDB()
@@ -57,19 +66,12 @@ func main() {
 	}
 	if config.MemoryCacheEnabled {
 		logger.SysLog("memory cache enabled")
-		logger.SysError(fmt.Sprintf("sync frequency: %d seconds", config.SyncFrequency))
+		logger.SysLog(fmt.Sprintf("sync frequency: %d seconds", config.SyncFrequency))
 		model.InitChannelCache()
 	}
 	if config.MemoryCacheEnabled {
 		go model.SyncOptions(config.SyncFrequency)
 		go model.SyncChannelCache(config.SyncFrequency)
-	}
-	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
-		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
-		if err != nil {
-			logger.FatalLog("failed to parse CHANNEL_UPDATE_FREQUENCY: " + err.Error())
-		}
-		go controller.AutomaticallyUpdateChannels(frequency)
 	}
 	if os.Getenv("CHANNEL_TEST_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_TEST_FREQUENCY"))
@@ -83,7 +85,11 @@ func main() {
 		logger.SysLog("batch update enabled with interval " + strconv.Itoa(config.BatchUpdateInterval) + "s")
 		model.InitBatchUpdater()
 	}
+	if config.EnableMetric {
+		logger.SysLog("metric enabled, will disable channel if too much request failed")
+	}
 	openai.InitTokenEncoders()
+	client.Init()
 
 	// Initialize HTTP server
 	server := gin.New()
@@ -101,6 +107,7 @@ func main() {
 	if port == "" {
 		port = strconv.Itoa(*common.Port)
 	}
+	logger.SysLogf("server started on http://localhost:%s", port)
 	err = server.Run(":" + port)
 	if err != nil {
 		logger.FatalLog("failed to start HTTP server: " + err.Error())
