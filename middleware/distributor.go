@@ -12,7 +12,7 @@ import (
 )
 
 type ModelRequest struct {
-	Model string `json:"model"`
+	Model string `json:"model" form:"model"`
 }
 
 func Distribute() func(c *gin.Context) {
@@ -61,6 +61,9 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	c.Set(ctxkey.Channel, channel.Type)
 	c.Set(ctxkey.ChannelId, channel.Id)
 	c.Set(ctxkey.ChannelName, channel.Name)
+	if channel.SystemPrompt != nil && *channel.SystemPrompt != "" {
+		c.Set(ctxkey.SystemPrompt, *channel.SystemPrompt)
+	}
 	c.Set(ctxkey.ModelMapping, channel.GetModelMapping())
 	c.Set(ctxkey.OriginalModel, modelName) // for retry
 	c.Request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", channel.Key))

@@ -45,5 +45,8 @@ const (
 	Novita
 	VertextAI
 	Proxy
+	SiliconFlow
+	XAI
+	Replicate
 	Dummy
 )
